@@ -462,11 +462,13 @@ describe('PrometheusDatasource', () => {
       expect(res.method).toBe('GET');
       expect(res.url).toBe(urlExpected);
     });
+
     it('should return series list', async () => {
       expect(results.data.length).toBe(1);
       expect(results.data[0].target).toBe('test{job="testjob"}');
     });
   });
+
   describe('When querying prometheus with one target which returns multiple series', () => {
     let results;
     const start = 60;
@@ -535,6 +537,7 @@ describe('PrometheusDatasource', () => {
       expect(results.data[1].datapoints[3][0]).toBe(null);
     });
   });
+
   describe('When querying prometheus with one target and instant = true', () => {
     let results;
     const urlExpected = 'proxied/api/v1/query?query=' + encodeURIComponent('test{job="testjob"}') + '&time=123';
@@ -577,6 +580,7 @@ describe('PrometheusDatasource', () => {
       expect(results.data[0].target).toBe('test{job="testjob"}');
     });
   });
+
   describe('When performing annotationQuery', () => {
     let results;
 
@@ -1226,6 +1230,7 @@ describe('PrometheusDatasource', () => {
       });
     });
   });
+
   describe('The __range, __range_s and __range_ms variables', () => {
     const response = {
       status: 'success',
@@ -1280,6 +1285,38 @@ describe('PrometheusDatasource', () => {
       });
     });
   });
+
+  describe('When query contains invalid syntax', () => {
+    it('should return an error', async () => {
+      const errMessage = 'parse error at char 25: could not parse remaining input';
+      const response = {
+        data: {
+          status: 'error',
+          errorType: 'bad_data',
+          error: errMessage,
+        },
+      };
+      backendSrv.datasourceRequest = jest.fn(() => Promise.reject(response));
+      ctx.ds = new PrometheusDatasource(instanceSettings, q, backendSrv as any, templateSrv as any, timeSrv as any);
+
+      let err;
+      const query = {
+        range: { from: time({ seconds: 63 }), to: time({ seconds: 183 }) },
+        targets: [{ expr: 'test{jo;;b="testjob"}', format: 'time_series' }],
+        interval: '60s',
+      };
+      await ctx.ds
+        .query(query)
+        .then(data => {
+          return;
+        })
+        .catch(e => {
+          err = e;
+        });
+
+      expect(err.message).toBe(`"${errMessage}"`);
+    });
+  });
 });
 
 describe('PrometheusDatasource for POST', () => {
@@ -1328,12 +1365,14 @@ describe('PrometheusDatasource for POST', () => {
         results = data;
       });
     });
+
     it('should generate the correct query', () => {
       const res = backendSrv.datasourceRequest.mock.calls[0][0];
       expect(res.method).toBe('POST');
       expect(res.url).toBe(urlExpected);
       expect(res.data).toEqual(dataExpected);
     });
+
     it('should return series list', () => {
       expect(results.data.length).toBe(1);
       expect(results.data[0].target).toBe('test{job="testjob"}');
